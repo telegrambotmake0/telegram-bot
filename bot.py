@@ -70,13 +70,25 @@ def extract_content(msg):
         return ["caption", msg.caption]
 
     if msg.photo:
-        return ["photo", msg.photo[-1].file_id]
+        return ["media", "photo"]
 
     if msg.video:
-        return ["video", msg.video.file_id]
+        return ["media", "video"]
 
     if msg.document:
-        return ["document", msg.document.file_id]
+        return ["media", "document"]
+
+    if msg.audio:
+        return ["media", "audio"]
+
+    if msg.voice:
+        return ["media", "voice"]
+
+    if msg.animation:
+        return ["media", "gif"]
+
+    if msg.video_note:
+        return ["media", "video_note"]
 
     return ["other", None]
 
