@@ -236,27 +236,43 @@ if not old_content:
     return  
 
 # 🔥 SADECE GERÇEK EDIT  
-if new_content == old_content:  
-    return  
 
-ctype = new_content[0]  
+async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.edited_message
+    if not msg:
+        return
 
-if cfg["mode"] == "text":  
-    if ctype not in ["text", "caption"]:  
-        return  
+    chat_id = str(msg.chat_id)
+    msg_id = str(msg.message_id)
 
-elif cfg["mode"] == "media":  
-    if ctype in ["text", "caption"]:  
-        return  
+    cfg = get_settings(chat_id)
 
-try:  
-    await context.bot.delete_message(int(chat_id), int(msg_id))  
-except:  
-    pass  
+    if is_service(msg):
+        return
 
-message_cache[chat_id][msg_id] = new_content  
-save_json(CACHE_FILE, message_cache)
+    # admin bypass
+    if msg.from_user and cfg["apply_admins"]:
+        if await is_admin(context.bot, int(chat_id), msg.from_user.id):
+            return
 
+    new_content = extract_content(msg)
+    old_content = message_cache.get(chat_id, {}).get(msg_id)
+
+    # ❗ daha önce hiç kayıt yoksa çık
+    if not old_content:
+        return
+
+    # ❗ gerçekten değişmişse sil
+    if new_content != old_content:
+        try:
+            await context.bot.delete_message(int(chat_id), int(msg_id))
+        except:
+            pass
+
+        # cache güncelle
+        message_cache[chat_id][msg_id] = new_content
+        save_json(CACHE_FILE, message_cache)
+        
 ------------------------
 
 #BOT
