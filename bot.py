@@ -214,8 +214,6 @@ app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, message_handler))
 # EDIT
 app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, edited_handler))
 
-print("Bot çalışıyor...")
-app.run_polling()    if msg.audio:
         return ["media", "audio"]
     if msg.voice:
         return ["media", "voice"]
