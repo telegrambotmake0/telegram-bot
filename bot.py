@@ -33,8 +33,8 @@ def load_json(file):
     return {}
 
 def save_json(file, data):
-with open(file, "w", encoding="utf-8") as f:
-json.dump(data, f)
+    with open(file, "w", encoding="utf-8") as f:
+        json.dump(data, f)
 
 message_cache = load_json(CACHE_FILE)
 settings = load_json(SETTINGS_FILE)
