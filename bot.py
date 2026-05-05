@@ -1,4 +1,4 @@
-# pip install python-telegram-bot==21.6
+# pip install python-telegram-bot==21.6 flask
 
 import json
 import os
@@ -13,14 +13,32 @@ from telegram.ext import (
 )
 from telegram.constants import ChatMemberStatus
 
-import os
-TOKEN = os.getenv("BOT_TOKEN")
-
-CACHE_FILE = "cache.json"
-SETTINGS_FILE = "settings.json"
+from flask import Flask
+from threading import Thread
 
 # ------------------------
-# LOAD / SAVE
+# BOT TOKEN
+TOKEN = os.getenv("BOT_TOKEN")
+
+# ------------------------
+# WEB SERVER (7/24 UYUMAMA)
+app_web = Flask('')
+
+@app_web.route('/')
+def home():
+    return "Bot aktif!"
+
+def run_web():
+    app_web.run(host="0.0.0.0", port=8080)
+
+def keep_alive():
+    t = Thread(target=run_web)
+    t.start()
+
+# ------------------------
+# FILES
+CACHE_FILE = "cache.json"
+SETTINGS_FILE = "settings.json"
 
 def load_json(file):
     if os.path.exists(file):
@@ -43,13 +61,13 @@ def save_all():
     save_json(SETTINGS_FILE, settings)
 
 # ------------------------
-
+# SETTINGS
 def get_settings(chat_id):
     chat_id = str(chat_id)
 
     if chat_id not in settings:
         settings[chat_id] = {
-            "mode": "all",          # all | text | media
+            "mode": "all",
             "apply_admins": True
         }
         save_all()
@@ -57,39 +75,32 @@ def get_settings(chat_id):
     return settings[chat_id]
 
 # ------------------------
-
+# ADMIN CHECK
 async def is_admin(bot, chat_id, user_id):
     member = await bot.get_chat_member(chat_id, user_id)
     return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
 
+# ------------------------
+# CONTENT
 def extract_content(msg):
     if msg.text:
         return ["text", msg.text]
-
     if msg.caption:
         return ["caption", msg.caption]
-
     if msg.photo:
         return ["media", "photo"]
-
     if msg.video:
         return ["media", "video"]
-
     if msg.document:
         return ["media", "document"]
-
     if msg.audio:
         return ["media", "audio"]
-
     if msg.voice:
         return ["media", "voice"]
-
     if msg.animation:
         return ["media", "gif"]
-
     if msg.video_note:
         return ["media", "video_note"]
-
     return ["other", None]
 
 def is_service(msg):
@@ -101,37 +112,21 @@ def is_service(msg):
     ])
 
 # ------------------------
-# HELP
-
+# COMMANDS
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("""
 🤖 Edit Koruma Botu
 
 ⚙️ /mode all | text | media
-→ Edit koruma modu
-
 👮 /admins on | off
-→ Adminleri koru/kapat
-
 📊 /status
-→ Ayarları gösterir
-
-❓ /help
-→ Komutlar
 """)
-
-# ------------------------
-# STATUS
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cfg = get_settings(update.message.chat_id)
-
     await update.message.reply_text(
-        f"Mode: {cfg['mode']}\nAdminlerde: {'Açık' if cfg['apply_admins'] else 'Kapalı'}"
+        f"Mode: {cfg['mode']}\nAdmin koruma: {cfg['apply_admins']}"
     )
-
-# ------------------------
-# MODE
 
 async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -140,23 +135,18 @@ async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await msg.reply_text("Kullanım: /mode all | text | media")
-        return
+        return await msg.reply_text("Kullanım: /mode all | text | media")
 
-    mode = context.args[0].lower()
+    mode = context.args[0]
 
     if mode not in ["all", "text", "media"]:
-        await msg.reply_text("Seçenekler: all, text, media")
-        return
+        return await msg.reply_text("all / text / media")
 
     cfg = get_settings(msg.chat_id)
     cfg["mode"] = mode
     save_all()
 
     await msg.reply_text(f"Mode: {mode}")
-
-# ------------------------
-# ADMINS
 
 async def admins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -165,14 +155,9 @@ async def admins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not context.args:
-        await msg.reply_text("Kullanım: /admins on | off")
-        return
+        return await msg.reply_text("on / off")
 
-    val = context.args[0].lower()
-
-    if val not in ["on", "off"]:
-        await msg.reply_text("Seçenekler: on / off")
-        return
+    val = context.args[0]
 
     cfg = get_settings(msg.chat_id)
     cfg["apply_admins"] = (val == "on")
@@ -181,14 +166,10 @@ async def admins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await msg.reply_text(f"Admin koruma: {val}")
 
 # ------------------------
-# CACHE (normal mesaj)
-
+# MESSAGE CACHE
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
-    if not msg:
-        return
-
-    if is_service(msg):
+    if not msg or is_service(msg):
         return
 
     chat_id = str(msg.chat_id)
@@ -200,8 +181,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json(CACHE_FILE, message_cache)
 
 # ------------------------
-# EDIT KORUMA (ASIL KISIM)
-
+# EDIT DELETE CORE
 async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.edited_message
     if not msg:
@@ -215,10 +195,9 @@ async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_service(msg):
         return
 
-    if msg.from_user:
-        if not cfg["apply_admins"]:
-            if await is_admin(context.bot, int(chat_id), msg.from_user.id):
-                return
+    if msg.from_user and cfg["apply_admins"]:
+        if await is_admin(context.bot, int(chat_id), msg.from_user.id):
+            return
 
     new_content = extract_content(msg)
     old_content = message_cache.get(chat_id, {}).get(msg_id)
@@ -228,19 +207,8 @@ async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_json(CACHE_FILE, message_cache)
         return
 
-    # 🔥 SADECE GERÇEK EDIT
     if new_content == old_content:
         return
-
-    ctype = new_content[0]
-
-    if cfg["mode"] == "text":
-        if ctype not in ["text", "caption"]:
-            return
-
-    elif cfg["mode"] == "media":
-        if ctype in ["text", "caption"]:
-            return
 
     try:
         await context.bot.delete_message(int(chat_id), int(msg_id))
@@ -251,21 +219,19 @@ async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_json(CACHE_FILE, message_cache)
 
 # ------------------------
-# BOT
-
+# BOT START
 app = ApplicationBuilder().token(TOKEN).build()
 
-# KOMUTLAR
 app.add_handler(CommandHandler("help", help_cmd))
 app.add_handler(CommandHandler("status", status))
 app.add_handler(CommandHandler("mode", mode_cmd))
 app.add_handler(CommandHandler("admins", admins_cmd))
 
-# NORMAL MESAJ
 app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND & ~filters.UpdateType.EDITED_MESSAGE, message_handler))
-
-# EDIT
 app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, edited_handler))
 
 print("Bot çalışıyor...")
+
+keep_alive()   # 🔥 7/24 açık tutma
+
 app.run_polling()
