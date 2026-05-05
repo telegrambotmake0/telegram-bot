@@ -19,7 +19,7 @@ TOKEN = os.getenv("BOT_TOKEN")
 CACHE_FILE = "cache.json"
 SETTINGS_FILE = "settings.json"
 
-------------------------
+#------------------------
 
 #LOAD / SAVE
 
@@ -43,7 +43,7 @@ def save_all():
 save_json(CACHE_FILE, message_cache)
 save_json(SETTINGS_FILE, settings)
 
-------------------------
+#------------------------
 
 def get_settings(chat_id):
 chat_id = str(chat_id)
@@ -57,7 +57,7 @@ if chat_id not in settings:
 
 return settings[chat_id]
 
-------------------------
+#------------------------
 
 async def is_admin(bot, chat_id, user_id):
 member = await bot.get_chat_member(chat_id, user_id)
@@ -101,7 +101,7 @@ msg.new_chat_title,
 msg.new_chat_photo
 ])
 
-------------------------
+#------------------------
 
 #HELP
 
@@ -133,7 +133,7 @@ await update.message.reply_text(
     f"Mode: {cfg['mode']}\nAdminlerde: {'Açık' if cfg['apply_admins'] else 'Kapalı'}"  
 )
 
-------------------------
+#------------------------
 
 #MODE
 
@@ -159,7 +159,7 @@ save_all()
 
 await msg.reply_text(f"Mode: {mode}")
 
-------------------------
+#------------------------
 
 #ADMINS
 
@@ -185,7 +185,7 @@ save_all()
 
 await msg.reply_text(f"Admin koruma: {val}")
 
-------------------------
+#------------------------
 
 #CACHE (normal mesaj)
 
@@ -205,7 +205,7 @@ message_cache[chat_id][msg_id] = extract_content(msg)
 
 save_json(CACHE_FILE, message_cache)
 
-------------------------
+#------------------------
 
 #EDIT KORUMA (ASIL KISIM)
 
@@ -273,7 +273,7 @@ async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_cache[chat_id][msg_id] = new_content
         save_json(CACHE_FILE, message_cache)
         
-------------------------
+#------------------------
 
 #BOT
 
