@@ -24,13 +24,13 @@ SETTINGS_FILE = "settings.json"
 #LOAD / SAVE
 
 def load_json(file):
-if os.path.exists(file):
-try:
-with open(file, "r", encoding="utf-8") as f:
-return json.load(f)
-except:
-return {}
-return {}
+    if os.path.exists(file):
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
 
 def save_json(file, data):
 with open(file, "w", encoding="utf-8") as f:
