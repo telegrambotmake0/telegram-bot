@@ -238,7 +238,7 @@ if not old_content:
 # 🔥 SADECE GERÇEK EDIT  
 
 async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.edited_message
+    msg = update.edited_message or update.channel_post
     if not msg:
         return
 
@@ -292,7 +292,7 @@ app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND & ~filters.UpdateT
 
 #EDIT
 
-app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, edited_handler))
+app.add_handler(MessageHandler(filters.UpdateType.EDITED_CHANNEL_POST, edited_handler))
 
 print("Bot çalışıyor...")
 app.run_polling()
