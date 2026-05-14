@@ -1,218 +1,197 @@
-import json
+import logging
 import os
 
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
-    ContextTypes,
+    Application,
+    CommandHandler,
     MessageHandler,
+    ContextTypes,
     filters,
-    CommandHandler
 )
-from telegram.constants import ChatMemberStatus
 
-# ------------------------
+# =========================
+# TOKEN
+# =========================
+TOKEN = os.getenv("TOKEN")
 
-TOKEN = os.getenv("BOT_TOKEN")
+# =========================
+# MOD
+# =========================
+current_mode = "all"
 
-CACHE_FILE = "cache.json"
-SETTINGS_FILE = "settings.json"
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
 
-# ------------------------
-# JSON HELPERS
+# =========================
+# ADMIN KONTROL
+# =========================
+def is_admin(status):
+    return status in ["administrator", "creator"]
 
-def load_json(file):
-    if os.path.exists(file):
-        try:
-            with open(file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            return {}
-    return {}
 
-def save_json(file, data):
-    with open(file, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-
-message_cache = load_json(CACHE_FILE)
-settings = load_json(SETTINGS_FILE)
-
-def save_all():
-    save_json(CACHE_FILE, message_cache)
-    save_json(SETTINGS_FILE, settings)
-
-# ------------------------
-
-def get_settings(chat_id):
-    chat_id = str(chat_id)
-
-    if chat_id not in settings:
-        settings[chat_id] = {
-            "mode": "all",
-            "apply_admins": True
-        }
-        save_all()
-
-    return settings[chat_id]
-
-# ------------------------
-
-async def is_admin(bot, chat_id, user_id):
-    member = await bot.get_chat_member(chat_id, user_id)
-    return member.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]
-
-# ------------------------
-
-def extract_content(msg):
-    if msg.text:
-        return ["text", msg.text]
-    if msg.caption:
-        return ["caption", msg.caption]
-    if msg.photo:
-        return ["media", "photo"]
-    if msg.video:
-        return ["media", "video"]
-    if msg.document:
-        return ["media", "document"]
-    if msg.audio:
-        return ["media", "audio"]
-    if msg.voice:
-        return ["media", "voice"]
-    if msg.animation:
-        return ["media", "gif"]
-    if msg.video_note:
-        return ["media", "video_note"]
-    return ["other", None]
-
-def is_service(msg):
-    return any([
-        msg.new_chat_members,
-        msg.left_chat_member,
-        msg.new_chat_title,
-        msg.new_chat_photo
-    ])
-
-# ------------------------
-# COMMANDS (GERİ EKLENDİ)
-
-async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("""
-🤖 Bot Komutları
-
-/help - Komutları gösterir
-/status - Grup ayarları
-/mode all | text | media
-/admins on | off
-""")
-
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cfg = get_settings(update.message.chat_id)
-
-    await update.message.reply_text(
-        f"Mode: {cfg['mode']}\nAdmin koruma: {cfg['apply_admins']}"
+async def check_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    member = await context.bot.get_chat_member(
+        update.effective_chat.id,
+        update.effective_user.id,
     )
 
-async def mode_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
+    return is_admin(member.status)
 
-    if not context.args:
-        return await msg.reply_text("Kullanım: /mode all | text | media")
 
-    mode = context.args[0]
+# =========================
+# START
+# =========================
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "✅ Edit Silme Botu Aktif\n\n"
+        "Komutlar için /help yaz."
+    )
 
-    if mode not in ["all", "text", "media"]:
-        return await msg.reply_text("all / text / media")
 
-    cfg = get_settings(msg.chat_id)
-    cfg["mode"] = mode
-    save_all()
+# =========================
+# HELP
+# =========================
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "📌 Komutlar\n\n"
+        "/mode text → Sadece yazı editlerini siler\n"
+        "/mode media → Sadece medya editlerini siler\n"
+        "/mode all → Tüm editleri siler\n\n"
+        "/status → Aktif modu gösterir\n"
+        "/help → Yardım menüsü\n\n"
+        "⚠ Özellikler:\n"
+        "• Fake editleri silmez\n"
+        "• İsim/tag değişince mesajları silmez\n"
+        "• Gerçek editleri siler"
+    )
 
-    await msg.reply_text(f"Mode: {mode}")
+    await update.message.reply_text(text)
 
-async def admins_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
 
-    if not context.args:
-        return await msg.reply_text("Kullanım: /admins on | off")
+# =========================
+# MODE
+# =========================
+async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global current_mode
 
-    val = context.args[0]
+    admin = await check_admin(update, context)
 
-    cfg = get_settings(msg.chat_id)
-    cfg["apply_admins"] = (val == "on")
-    save_all()
-
-    await msg.reply_text(f"Admin koruma: {val}")
-
-# ------------------------
-# MESSAGE CACHE
-
-async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message
-    if not msg:
+    if not admin:
+        await update.message.reply_text(
+            "❌ Bu komutu sadece admin kullanabilir."
+        )
         return
 
-    if is_service(msg):
+    if len(context.args) == 0:
+        await update.message.reply_text(
+            "Kullanım:\n"
+            "/mode text\n"
+            "/mode media\n"
+            "/mode all"
+        )
         return
 
-    chat_id = str(msg.chat_id)
-    msg_id = str(msg.message_id)
+    mode = context.args[0].lower()
 
-    message_cache.setdefault(chat_id, {})
-    message_cache[chat_id][msg_id] = extract_content(msg)
-
-    save_json(CACHE_FILE, message_cache)
-
-# ------------------------
-# EDIT HANDLER
-
-async def edited_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.edited_message
-    if not msg:
+    if mode not in ["text", "media", "all"]:
+        await update.message.reply_text("❌ Geçersiz mod.")
         return
 
-    chat_id = str(msg.chat_id)
-    msg_id = str(msg.message_id)
+    current_mode = mode
 
-    cfg = get_settings(chat_id)
+    await update.message.reply_text(
+        f"✅ Mod değiştirildi: {mode}"
+    )
 
-    if is_service(msg):
+
+# =========================
+# STATUS
+# =========================
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"📌 Aktif mod: {current_mode}"
+    )
+
+
+# =========================
+# EDIT KONTROL
+# =========================
+async def handle_edited(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    edited = update.edited_message
+
+    if not edited:
         return
 
-    if msg.from_user and cfg["apply_admins"]:
-        if await is_admin(context.bot, int(chat_id), msg.from_user.id):
-            return
+    is_text = bool(edited.text)
 
-    new_content = extract_content(msg)
-    old_content = message_cache.get(chat_id, {}).get(msg_id)
+    is_media = bool(
+        edited.photo
+        or edited.video
+        or edited.document
+        or edited.audio
+        or edited.voice
+        or edited.animation
+        or edited.sticker
+    )
 
-    if not old_content:
+    should_delete = False
+
+    if current_mode == "all":
+        should_delete = True
+
+    elif current_mode == "text" and is_text:
+        should_delete = True
+
+    elif current_mode == "media" and is_media:
+        should_delete = True
+
+    if not should_delete:
         return
 
-    if new_content != old_content:
-        try:
-            await context.bot.delete_message(int(chat_id), int(msg_id))
-        except:
-            pass
+    try:
+        await edited.delete()
 
-        message_cache[chat_id][msg_id] = new_content
-        save_json(CACHE_FILE, message_cache)
+        await context.bot.send_message(
+            chat_id=edited.chat.id,
+            text=(
+                f"🗑 Editlenen mesaj silindi\n"
+                f"👤 {edited.from_user.full_name}"
+            ),
+        )
 
-# ------------------------
-# BOT
+    except Exception as e:
+        print(e)
 
-app = ApplicationBuilder().token(TOKEN).build()
 
-# KOMUTLAR (GERİ EKLENDİ)
-app.add_handler(CommandHandler("help", help_cmd))
-app.add_handler(CommandHandler("status", status))
-app.add_handler(CommandHandler("mode", mode_cmd))
-app.add_handler(CommandHandler("admins", admins_cmd))
+# =========================
+# MAIN
+# =========================
+def main():
+    if not TOKEN:
+        print("TOKEN bulunamadı!")
+        return
 
-# MESAJLAR
-app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, message_handler))
+    app = Application.builder().token(TOKEN).build()
 
-# EDIT
-app.add_handler(MessageHandler(filters.UpdateType.EDITED_MESSAGE, edited_handler))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("mode", mode_command))
+    app.add_handler(CommandHandler("status", status_command))
 
-print("Bot çalışıyor...")
-app.run_polling()
+    app.add_handler(
+        MessageHandler(
+            filters.UpdateType.EDITED_MESSAGE,
+            handle_edited,
+        )
+    )
+
+    print("✅ Bot çalışıyor...")
+
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
